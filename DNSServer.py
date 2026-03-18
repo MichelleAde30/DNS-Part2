@@ -14,7 +14,6 @@ server_socket.bind(("127.0.0.1", 8053))
 
 print("DNS Server is running...")
 
-# 👇 IMPORTANT CHANGE HERE
 for _ in range(10):
     data, client_address = server_socket.recvfrom(512)
 
