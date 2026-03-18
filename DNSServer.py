@@ -76,15 +76,16 @@ dns_records = {
             86400,  # minimum
         ),
     },
-    'nyu.edu.': {
-        dns.rdatatype.A: '216.165.61.24',
-        dns.rdatatype.AAAA: '2620:12a:8000::1',
-        dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
-        dns.rdatatype.NS: 'ns1.nyu.edu.',
-    },
-    'safebank.com.': {
-        dns.rdatatype.A: '12.210.12.210',
-    },
+    "nyu.edu.": {
+    dns.rdatatype.A: "216.165.61.24",
+    dns.rdatatype.AAAA: "2620:12a:8000::5",   # ✅ FIX
+    dns.rdatatype.MX: [(10, "mxa-00256a01.gslb.pphosted.com.")],
+    dns.rdatatype.NS: "ns1.nyu.edu.",
+},
+
+"safebank.com.": {
+    dns.rdatatype.A: "12.210.12.214",   # ✅ FIX
+},
 
     # Add more records as needed (see assignment instructions!)
 }
@@ -111,10 +112,12 @@ def run_dns_server():
             generate_sha256_hash(qname)
 
             # Check if there is a record in the `dns_records` dictionary that matches the question
-            if qname in dns_records and qtype in dns_records[qname]:
-                # Retrieve the data for the record and create an appropriate `rdata` object for it
-                answer_data = dns_records[qname][qtype]
-
+          if qname not in dns_records:
+    response.set_rcode(3)
+elif qtype not in dns_records[qname]:
+    response.set_rcode(3)
+else:
+    answer_data = dns_records[qname][qtype]
                 rdata_list = []
 
                 if qtype == dns.rdatatype.MX:
