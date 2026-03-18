@@ -1,10 +1,8 @@
 import dns.message
 import dns.rdatatype
 import dns.rdataclass
-import dns.rrset
-from dns.rdtypes.ANY.MX import MX
-from dns.rdtypes.ANY.SOA import SOA
 import dns.rdata
+import dns.rrset
 import socket
 import threading
 import signal
@@ -16,6 +14,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
+import ast
 
 
 def generate_aes_key(password, salt):
@@ -30,6 +29,7 @@ def generate_aes_key(password, salt):
     return key
 
 
+# Lookup details on fernet in the cryptography.io documentation
 def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
@@ -44,20 +44,22 @@ def decrypt_with_aes(encrypted_data, password, salt):
     return decrypted_data.decode("utf-8")
 
 
-salt = b"salt1234"
+salt = b"salt1234"   # Remember it should be a byte-object
 password = "password123"
 input_string = "test"
 
-encrypted_value = encrypt_with_aes(input_string, password, salt)
-decrypted_value = decrypt_with_aes(encrypted_value, password, salt)
+encrypted_value = encrypt_with_aes(input_string, password, salt)   # exfil function
+decrypted_value = decrypt_with_aes(encrypted_value, password, salt)  # exfil function
 
 
+# For future use
 def generate_sha256_hash(input_string):
     sha256_hash = hashlib.sha256()
     sha256_hash.update(input_string.encode("utf-8"))
     return sha256_hash.hexdigest()
 
 
+# A dictionary containing DNS records mapping hostnames to different types of DNS data.
 dns_records = {
     "example.com.": {
         dns.rdatatype.A: "192.168.1.101",
@@ -76,18 +78,26 @@ dns_records = {
             86400,
         ),
     },
+
+    "nyu.edu.": {
+        dns.rdatatype.A: "222.222.222.222",
+        dns.rdatatype.AAAA: "2001:db8::2",
+        dns.rdatatype.MX: [(10, "mail.nyu.edu.")],
+        dns.rdatatype.NS: "ns.nyu.edu.",
+    },
+
     "google.com.": {
         dns.rdatatype.A: "111.111.111.111",
     },
+
     "yahoo.com.": {
         dns.rdatatype.A: "98.137.246.7",
     },
-    "nyu.edu.": {
-        dns.rdatatype.A: "222.222.222.222",
-    },
+
     "safebank.com.": {
         dns.rdatatype.A: "12.210.12.210",
     },
+
     "legitsite.com.": {
         dns.rdatatype.A: "10.10.10.10",
     },
@@ -95,45 +105,54 @@ dns_records = {
 
 
 def run_dns_server():
+    # Create a UDP socket and bind it to the local IP address and standard DNS port
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind(("127.0.0.1", 53))
 
     while True:
         try:
+            # Wait for incoming DNS requests
             data, addr = server_socket.recvfrom(1024)
+
+            # Parse the request using dns.message.from_wire
             request = dns.message.from_wire(data)
+
+            # Create a response message using dns.message.make_response
             response = dns.message.make_response(request)
 
+            # Get the question from the request
             question = request.question[0]
             qname = question.name.to_text()
             qtype = question.rdtype
 
+            # Check if there is a record in dns_records that matches the question
             if qname in dns_records and qtype in dns_records[qname]:
                 answer_data = dns_records[qname][qtype]
                 rdata_list = []
 
                 if qtype == dns.rdatatype.MX:
                     for pref, server in answer_data:
-                        rdata_list.append(MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server))
+                        rdata = dns.rdata.from_text(
+                            dns.rdataclass.IN,
+                            dns.rdatatype.MX,
+                            f"{pref} {server}"
+                        )
+                        rdata_list.append(rdata)
 
                 elif qtype == dns.rdatatype.SOA:
                     mname, rname, serial, refresh, retry, expire, minimum = answer_data
-                    rdata = SOA(
+                    rdata = dns.rdata.from_text(
                         dns.rdataclass.IN,
                         dns.rdatatype.SOA,
-                        mname,
-                        rname,
-                        serial,
-                        refresh,
-                        retry,
-                        expire,
-                        minimum,
+                        f"{mname} {rname} {serial} {refresh} {retry} {expire} {minimum}"
                     )
                     rdata_list.append(rdata)
 
                 else:
                     if isinstance(answer_data, str):
-                        rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)]
+                        rdata_list = [
+                            dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)
+                        ]
                     else:
                         rdata_list = [
                             dns.rdata.from_text(dns.rdataclass.IN, qtype, item)
@@ -145,9 +164,13 @@ def run_dns_server():
                     rrset.add(rdata)
                     response.answer.append(rrset)
             else:
-                response.set_rcode(3)  # NXDOMAIN
+                # NXDOMAIN for unknown names/types
+                response.set_rcode(3)
 
+            # Set the response flags
             response.flags |= 1 << 10
+
+            # Send response back to client
             print("Responding to request:", qname)
             server_socket.sendto(response.to_wire(), addr)
 
@@ -176,3 +199,5 @@ def run_dns_server_user():
 
 if __name__ == "__main__":
     run_dns_server_user()
+    # print("Encrypted Value:", encrypted_value)
+    # print("Decrypted Value:", decrypted_value)
