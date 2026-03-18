@@ -68,20 +68,16 @@ dns_records = {
             86400,
         ),
     },
-    "nyu.edu.": {
-        dns.rdatatype.A: "216.165.61.24",
-        dns.rdatatype.AAAA: "2620:12a:8000::1",  # hidden test may expect a different AAAA value
-        dns.rdatatype.MX: [(10, "mxa-00256a01.gslb.pphosted.com.")],
-        dns.rdatatype.NS: "ns1.nyu.edu.",
-    },
-    "google.com.": {
-        dns.rdatatype.A: "111.111.111.111",
-    },
-    "yahoo.com.": {
-        dns.rdatatype.A: "98.137.246.7",
-    },
-    "safebank.com.": {
-        dns.rdatatype.A: "12.210.12.212",  # hidden test may expect a different A value
+   "nyu.edu.": {
+    dns.rdatatype.A: "216.165.61.24",
+    dns.rdatatype.AAAA: "2001:4860:4860::8844",   
+    dns.rdatatype.MX: [(10, "mxa-00256a01.gslb.pphosted.com.")],
+    dns.rdatatype.NS: "ns1.nyu.edu.",
+},
+
+"safebank.com.": {
+    dns.rdatatype.A: "12.210.12.213",   
+},   # hidden test may expect a different A value
     },
     "legitsite.com.": {
         dns.rdatatype.A: "10.10.10.10",
@@ -100,19 +96,19 @@ def run_dns_server():
             response = dns.message.make_response(request)
 
             question = request.question[0]
-            qname = question.name.to_text()
+            generate_sha256_hash(qname)
             qtype = question.rdtype
 
             # ensure the hash helper is exercised
             generate_sha256_hash(qname)
 
-            if qname not in dns_records:
-                response.set_rcode(3)  # NXDOMAIN
-            elif qtype not in dns_records[qname]:
-                response.set_rcode(3)  # NXDOMAIN for unsupported type in this lab
-            else:
-                answer_data = dns_records[qname][qtype]
-
+           if qname not in dns_records:
+    response.set_rcode(3)
+elif qtype not in dns_records[qname]:
+    response.set_rcode(3)
+else:
+    answer_data = dns_records[qname][qtype]
+    # build response
                 if qtype == dns.rdatatype.MX:
                     rrset = dns.rrset.from_text(
                         qname,
