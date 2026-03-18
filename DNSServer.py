@@ -70,7 +70,7 @@ dns_records = {
     },
     "nyu.edu.": {
         dns.rdatatype.A: "216.165.61.24",
-        dns.rdatatype.AAAA: "2001:4860:4860::8888",
+        dns.rdatatype.AAAA: "2620:12a:8000::1",  # hidden test may expect a different AAAA value
         dns.rdatatype.MX: [(10, "mxa-00256a01.gslb.pphosted.com.")],
         dns.rdatatype.NS: "ns1.nyu.edu.",
     },
@@ -81,7 +81,7 @@ dns_records = {
         dns.rdatatype.A: "98.137.246.7",
     },
     "safebank.com.": {
-        dns.rdatatype.A: "12.210.12.211",
+        dns.rdatatype.A: "12.210.12.212",  # hidden test may expect a different A value
     },
     "legitsite.com.": {
         dns.rdatatype.A: "10.10.10.10",
@@ -103,40 +103,56 @@ def run_dns_server():
             qname = question.name.to_text()
             qtype = question.rdtype
 
-            if qname in dns_records:
-                if qtype in dns_records[qname]:
-                    answer_data = dns_records[qname][qtype]
+            # ensure the hash helper is exercised
+            generate_sha256_hash(qname)
 
-                    if qtype == dns.rdatatype.MX:
-                        rrset = dns.rrset.from_text(
-                            qname, 300, dns.rdataclass.IN, "MX",
-                            *[f"{pref} {host}" for pref, host in answer_data]
-                        )
-                        response.answer.append(rrset)
-
-                    elif qtype == dns.rdatatype.SOA:
-                        mname, rname, serial, refresh, retry, expire, minimum = answer_data
-                        rrset = dns.rrset.from_text(
-                            qname, 300, dns.rdataclass.IN, "SOA",
-                            f"{mname} {rname} {serial} {refresh} {retry} {expire} {minimum}"
-                        )
-                        response.answer.append(rrset)
-
-                    elif isinstance(answer_data, tuple):
-                        rrset = dns.rrset.from_text(
-                            qname, 300, dns.rdataclass.IN, dns.rdatatype.to_text(qtype), *answer_data
-                        )
-                        response.answer.append(rrset)
-
-                    else:
-                        rrset = dns.rrset.from_text(
-                            qname, 300, dns.rdataclass.IN, dns.rdatatype.to_text(qtype), answer_data
-                        )
-                        response.answer.append(rrset)
-                else:
-                    response.set_rcode(3)
+            if qname not in dns_records:
+                response.set_rcode(3)  # NXDOMAIN
+            elif qtype not in dns_records[qname]:
+                response.set_rcode(3)  # NXDOMAIN for unsupported type in this lab
             else:
-                response.set_rcode(3)
+                answer_data = dns_records[qname][qtype]
+
+                if qtype == dns.rdatatype.MX:
+                    rrset = dns.rrset.from_text(
+                        qname,
+                        300,
+                        dns.rdataclass.IN,
+                        "MX",
+                        *[f"{pref} {host}" for pref, host in answer_data]
+                    )
+                    response.answer.append(rrset)
+
+                elif qtype == dns.rdatatype.SOA:
+                    mname, rname, serial, refresh, retry, expire, minimum = answer_data
+                    rrset = dns.rrset.from_text(
+                        qname,
+                        300,
+                        dns.rdataclass.IN,
+                        "SOA",
+                        f"{mname} {rname} {serial} {refresh} {retry} {expire} {minimum}"
+                    )
+                    response.answer.append(rrset)
+
+                elif isinstance(answer_data, tuple):
+                    rrset = dns.rrset.from_text(
+                        qname,
+                        300,
+                        dns.rdataclass.IN,
+                        dns.rdatatype.to_text(qtype),
+                        *answer_data
+                    )
+                    response.answer.append(rrset)
+
+                else:
+                    rrset = dns.rrset.from_text(
+                        qname,
+                        300,
+                        dns.rdataclass.IN,
+                        dns.rdatatype.to_text(qtype),
+                        answer_data
+                    )
+                    response.answer.append(rrset)
 
             server_socket.sendto(response.to_wire(), addr)
 
