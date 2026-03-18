@@ -12,12 +12,15 @@ dns_records = {
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_socket.bind(("127.0.0.1", 8053))
 
+# ✅ ADD THIS LINE
+server_socket.settimeout(2)
+
 print("DNS Server is running...")
 
 for _ in range(10):
-    data, client_address = server_socket.recvfrom(512)
-
     try:
+        data, client_address = server_socket.recvfrom(512)
+
         domain = data.decode().strip()
         print(f"Received query for: {domain}")
 
@@ -28,7 +31,12 @@ for _ in range(10):
 
         server_socket.sendto(response.encode(), client_address)
 
+    except socket.timeout:
+        print("No more requests. Exiting...")
+        break
+
     except Exception as e:
         print(f"Error: {e}")
 
 server_socket.close()
+
