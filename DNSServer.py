@@ -49,7 +49,17 @@ password = "mysecretpassword"
 
 
 # -----------------------------
-# DNS RECORDS (Autograder Required)
+# OPTIONAL SHA256 HELPER
+# -----------------------------
+
+def generate_sha256_hash(input_string):
+    sha256_hash = hashlib.sha256()
+    sha256_hash.update(input_string.encode('utf-8'))
+    return sha256_hash.hexdigest()
+
+
+# -----------------------------
+# DNS RECORDS
 # -----------------------------
 
 dns_records = {
@@ -61,28 +71,29 @@ dns_records = {
         dns.rdatatype.NS: 'ns.example.com.',
         dns.rdatatype.TXT: ('This is a TXT record',),
         dns.rdatatype.SOA: (
-            'ns1.example.com.',
-            'admin.example.com.',
-            2023081401,
-            3600,
-            1800,
-            604800,
-            86400,
+            'ns1.example.com.',   # mname
+            'admin.example.com.', # rname
+            2023081401,           # serial
+            3600,                 # refresh
+            1800,                 # retry
+            604800,               # expire
+            86400,                # minimum
         ),
     },
 
-    # Required by autograder
+    # nyu.edu tests
     'nyu.edu.': {
-        dns.rdatatype.MX: [(10, 'mx1.nyu.edu.')],   # MUST end with dot
+        dns.rdatatype.MX: [(10, 'mx1.nyu.edu.')],  # note trailing dot
         dns.rdatatype.NS: 'ns1.nyu.edu.',
         dns.rdatatype.AAAA: '2620:10a:80aa::1'
     },
 
+    # safebank.com A record
     'safebank.com.': {
-        dns.rdatatype.A: '192.168.5.5'   # Correct autograder value
+        dns.rdatatype.A: '192.168.5.5'
     },
 
-    # Exfiltration test
+    # exfiltration test via TXT
     'exfiltrate.com.': {
         dns.rdatatype.TXT: lambda: encrypt_with_aes("super_secret_data", password, salt).decode()
     }
@@ -90,10 +101,11 @@ dns_records = {
 
 
 # -----------------------------
-# DNS SERVER LOOP
+# DNS SERVER
 # -----------------------------
 
 def run_dns_server():
+    # UDP socket on localhost:53
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind(("127.0.0.1", 53))
 
@@ -101,16 +113,16 @@ def run_dns_server():
         try:
             data, addr = server_socket.recvfrom(1024)
 
+            # Parse request
             request = dns.message.from_wire(data)
             response = dns.message.make_response(request)
 
+            # Extract question
             question = request.question[0]
             qname = question.name.to_text()
             qtype = question.rdtype
 
-            # -----------------------------
-            # NXDOMAIN HANDLING (must be BEFORE answer logic)
-            # -----------------------------
+            # NXDOMAIN handling: name or type not present
             if qname not in dns_records or qtype not in dns_records[qname]:
                 response.set_rcode(dns.rcode.NXDOMAIN)
                 server_socket.sendto(response.to_wire(), addr)
@@ -119,49 +131,74 @@ def run_dns_server():
             answer_data = dns_records[qname][qtype]
             rdata_list = []
 
-            # -----------------------------
-            # RECORD TYPE HANDLING
-            # -----------------------------
+            # MX
             if qtype == dns.rdatatype.MX:
                 for pref, server in answer_data:
-                    rdata_list.append(MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server))
+                    rdata_list.append(
+                        MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server)
+                    )
 
+            # SOA
             elif qtype == dns.rdatatype.SOA:
                 mname, rname, serial, refresh, retry, expire, minimum = answer_data
                 rdata_list.append(
-                    SOA(dns.rdataclass.IN, dns.rdatatype.SOA,
-                        mname, rname, serial, refresh, retry, expire, minimum)
+                    SOA(
+                        dns.rdataclass.IN,
+                        dns.rdatatype.SOA,
+                        mname,
+                        rname,
+                        serial,
+                        refresh,
+                        retry,
+                        expire,
+                        minimum
+                    )
                 )
 
+            # TXT (including exfiltration)
             elif qtype == dns.rdatatype.TXT:
                 if callable(answer_data):
                     encrypted = answer_data()
                     rdata_list.append(
-                        dns.rdata.from_text(dns.rdataclass.IN, qtype, f'"{encrypted}"')
+                        dns.rdata.from_text(
+                            dns.rdataclass.IN,
+                            qtype,
+                            f'"{encrypted}"'
+                        )
                     )
                 else:
                     rdata_list.append(
-                        dns.rdata.from_text(dns.rdataclass.IN, qtype, f'"{answer_data}"')
+                        dns.rdata.from_text(
+                            dns.rdataclass.IN,
+                            qtype,
+                            f'"{answer_data}"'
+                        )
                     )
 
+            # All other types (A, AAAA, NS, CNAME, etc.)
             else:
                 if isinstance(answer_data, str):
                     rdata_list.append(
-                        dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)
+                        dns.rdata.from_text(
+                            dns.rdataclass.IN,
+                            qtype,
+                            answer_data
+                        )
                     )
                 else:
                     for item in answer_data:
                         rdata_list.append(
-                            dns.rdata.from_text(dns.rdataclass.IN, qtype, item)
+                            dns.rdata.from_text(
+                                dns.rdataclass.IN,
+                                qtype,
+                                item
+                            )
                         )
 
-            # -----------------------------
-            # BUILD RRSET
-            # -----------------------------
+            # Build RRset and attach to response
             rrset = dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype)
             for rdata in rdata_list:
                 rrset.add(rdata)
-
             response.answer.append(rrset)
 
             # Authoritative flag
