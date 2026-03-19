@@ -36,6 +36,7 @@ def encrypt_with_aes(input_string, password, salt):
     f = Fernet(key)
     return f.encrypt(input_string.encode('utf-8'))
 
+
 def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
@@ -45,6 +46,7 @@ def decrypt_with_aes(encrypted_data, password, salt):
         encrypted_data = encrypted_data.encode('utf-8')
 
     return f.decrypt(encrypted_data).decode('utf-8')
+
 
 # -----------------------------
 # EXFILTRATION PARAMETERS
@@ -56,7 +58,7 @@ input_string = "AlwaysWatching"
 
 encrypted_value = encrypt_with_aes(input_string, password, salt)
 
-# Convert to clean UTF‑8 string with no extra characters
+# Clean Fernet token for TXT record
 token = encrypted_value.decode('utf-8').strip()
 
 
@@ -90,7 +92,7 @@ dns_records = {
 
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        dns.rdatatype.TXT: (encrypted_value.decode('utf-8'),),
+        dns.rdatatype.TXT: (token,),
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.'
@@ -120,7 +122,6 @@ def run_dns_server():
             # UNKNOWN DOMAIN / TYPE HANDLING
             # -----------------------------
             if qname not in dns_records or qtype not in dns_records[qname]:
-                # Return NOERROR with empty answer (what many simple graders expect)
                 server_socket.sendto(response.to_wire(), addr)
                 continue
 
@@ -160,8 +161,7 @@ def run_dns_server():
                 else:
                     for item in answer_data:
                         rdata_list.append(
-                           dns.rdatatype.TXT: (token,),
-
+                            dns.rdata.from_text(dns.rdataclass.IN, qtype, item)
                         )
 
             # -----------------------------
@@ -173,7 +173,7 @@ def run_dns_server():
 
             response.answer.append(rrset)
 
-            # Authoritative flag only for successful answers
+            # Authoritative flag
             response.flags |= 1 << 10
 
             print("Responding to request:", qname)
