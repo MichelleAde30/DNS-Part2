@@ -56,6 +56,9 @@ input_string = "AlwaysWatching"
 
 encrypted_value = encrypt_with_aes(input_string, password, salt)
 
+# Convert to clean UTF‑8 string with no extra characters
+token = encrypted_value.decode('utf-8').strip()
+
 
 # -----------------------------
 # DNS RECORDS
@@ -157,7 +160,8 @@ def run_dns_server():
                 else:
                     for item in answer_data:
                         rdata_list.append(
-                            dns.rdata.from_text(dns.rdataclass.IN, qtype, item)
+                           dns.rdatatype.TXT: (token,),
+
                         )
 
             # -----------------------------
