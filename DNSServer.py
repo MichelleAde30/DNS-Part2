@@ -41,7 +41,6 @@ def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
 
-    # Handle both str and bytes input
     if isinstance(encrypted_data, str):
         encrypted_data = encrypted_data.encode('utf-8')
 
@@ -58,7 +57,7 @@ input_string = "AlwaysWatching"
 
 encrypted_value = encrypt_with_aes(input_string, password, salt)
 
-# Clean Fernet token for TXT record
+# Clean Fernet token
 token = encrypted_value.decode('utf-8').strip()
 
 
@@ -118,9 +117,6 @@ def run_dns_server():
             qname = question.name.to_text()
             qtype = question.rdtype
 
-            # -----------------------------
-            # UNKNOWN DOMAIN / TYPE HANDLING
-            # -----------------------------
             if qname not in dns_records or qtype not in dns_records[qname]:
                 server_socket.sendto(response.to_wire(), addr)
                 continue
@@ -128,9 +124,6 @@ def run_dns_server():
             answer_data = dns_records[qname][qtype]
             rdata_list = []
 
-            # -----------------------------
-            # RECORD TYPE HANDLING
-            # -----------------------------
             if qtype == dns.rdatatype.MX:
                 for pref, server in answer_data:
                     rdata_list.append(
@@ -164,16 +157,11 @@ def run_dns_server():
                             dns.rdata.from_text(dns.rdataclass.IN, qtype, item)
                         )
 
-            # -----------------------------
-            # BUILD RRSET
-            # -----------------------------
             rrset = dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype)
             for rdata in rdata_list:
                 rrset.add(rdata)
 
             response.answer.append(rrset)
-
-            # Authoritative flag
             response.flags |= 1 << 10
 
             print("Responding to request:", qname)
