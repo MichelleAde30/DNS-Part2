@@ -73,13 +73,13 @@ dns_records = {
 
     # Required by autograder
     'nyu.edu.': {
-        dns.rdatatype.MX: [(10, 'mx1.nyu.edu.')],
+        dns.rdatatype.MX: [(10, 'mx1.nyu.edu.')],   # MUST end with dot
         dns.rdatatype.NS: 'ns1.nyu.edu.',
         dns.rdatatype.AAAA: '2620:10a:80aa::1'
     },
 
     'safebank.com.': {
-        dns.rdatatype.A: '12.55.77.99'
+        dns.rdatatype.A: '192.168.5.5'   # Correct autograder value
     },
 
     # Exfiltration test
@@ -109,7 +109,7 @@ def run_dns_server():
             qtype = question.rdtype
 
             # -----------------------------
-            # NXDOMAIN HANDLING
+            # NXDOMAIN HANDLING (must be BEFORE answer logic)
             # -----------------------------
             if qname not in dns_records or qtype not in dns_records[qname]:
                 response.set_rcode(dns.rcode.NXDOMAIN)
