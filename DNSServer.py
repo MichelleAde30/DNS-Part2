@@ -37,6 +37,12 @@ def encrypt_with_aes(input_string, password, salt):
     return f.encrypt(input_string.encode('utf-8'))
 
 
+def decrypt_with_aes(encrypted_data, password, salt):
+    key = generate_aes_key(password, salt)
+    f = Fernet(key)
+    return f.decrypt(encrypted_data).decode('utf-8')
+
+
 # -----------------------------
 # EXFILTRATION PARAMETERS
 # -----------------------------
@@ -109,7 +115,6 @@ def run_dns_server():
             # -----------------------------
             if qname not in dns_records or qtype not in dns_records[qname]:
                 response.set_rcode(dns.rcode.NXDOMAIN)
-                response.flags |= 1 << 10  # authoritative
                 server_socket.sendto(response.to_wire(), addr)
                 continue
 
@@ -161,7 +166,7 @@ def run_dns_server():
 
             response.answer.append(rrset)
 
-            # Authoritative flag
+            # Authoritative flag only for successful answers
             response.flags |= 1 << 10
 
             print("Responding to request:", qname)
