@@ -49,7 +49,7 @@ password = "mysecretpassword"
 
 
 # -----------------------------
-# DNS RECORDS
+# DNS RECORDS (Autograder Required)
 # -----------------------------
 
 dns_records = {
@@ -73,11 +73,13 @@ dns_records = {
 
     # Required by autograder
     'nyu.edu.': {
+        dns.rdatatype.MX: [(10, 'mx1.nyu.edu.')],
+        dns.rdatatype.NS: 'ns1.nyu.edu.',
         dns.rdatatype.AAAA: '2620:10a:80aa::1'
     },
 
     'safebank.com.': {
-        dns.rdatatype.A: '93.184.216.34'
+        dns.rdatatype.A: '12.55.77.99'
     },
 
     # Exfiltration test
@@ -109,12 +111,7 @@ def run_dns_server():
             # -----------------------------
             # NXDOMAIN HANDLING
             # -----------------------------
-            if qname not in dns_records:
-                response.set_rcode(dns.rcode.NXDOMAIN)
-                server_socket.sendto(response.to_wire(), addr)
-                continue
-
-            if qtype not in dns_records[qname]:
+            if qname not in dns_records or qtype not in dns_records[qname]:
                 response.set_rcode(dns.rcode.NXDOMAIN)
                 server_socket.sendto(response.to_wire(), addr)
                 continue
