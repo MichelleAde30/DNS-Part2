@@ -41,13 +41,11 @@ def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
 
-    # Handle both str and bytes input
+   # Handle both str and bytes input
     if isinstance(encrypted_data, str):
         encrypted_data = encrypted_data.encode('utf-8')
 
-    return f.decrypt(encrypted_data).decode('utf-8')
-
-
+     return f.decrypt(encrypted_data).decode('utf-8')
 # -----------------------------
 # EXFILTRATION PARAMETERS
 # -----------------------------
