@@ -10,7 +10,6 @@ import signal
 import os
 import sys
 
-import hashlib
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -72,11 +71,11 @@ dns_records = {
         ),
     },
 
-    # Assignment-required A records
     'safebank.com.': {dns.rdatatype.A: '192.168.1.102'},
     'google.com.': {dns.rdatatype.A: '192.168.1.103'},
     'legitsite.com.': {dns.rdatatype.A: '192.168.1.104'},
     'yahoo.com.': {dns.rdatatype.A: '192.168.1.105'},
+
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
         dns.rdatatype.TXT: (encrypted_value.decode('utf-8'),),
@@ -110,6 +109,7 @@ def run_dns_server():
             # -----------------------------
             if qname not in dns_records or qtype not in dns_records[qname]:
                 response.set_rcode(dns.rcode.NXDOMAIN)
+                response.flags |= 1 << 10  # authoritative
                 server_socket.sendto(response.to_wire(), addr)
                 continue
 
@@ -121,63 +121,11 @@ def run_dns_server():
             # -----------------------------
             if qtype == dns.rdatatype.MX:
                 for pref, server in answer_data:
-                    rdata_list.append(MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server))
+                    rdata_list.append(
+                        MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server)
+                    )
 
             elif qtype == dns.rdatatype.SOA:
                 mname, rname, serial, refresh, retry, expire, minimum = answer_data
                 rdata_list.append(
-                    SOA(dns.rdataclass.IN, dns.rdatatype.SOA,
-                        mname, rname, serial, refresh, retry, expire, minimum)
-                )
-
-            else:
-                if isinstance(answer_data, str):
-                    rdata_list.append(
-                        dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)
-                    )
-                else:
-                    for item in answer_data:
-                        rdata_list.append(
-                            dns.rdata.from_text(dns.rdataclass.IN, qtype, item)
-                        )
-
-            # -----------------------------
-            # BUILD RRSET
-            # -----------------------------
-            rrset = dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype)
-            for rdata in rdata_list:
-                rrset.add(rdata)
-
-            response.answer.append(rrset)
-
-            # Authoritative flag
-            response.flags |= 1 << 10
-
-            print("Responding to request:", qname)
-            server_socket.sendto(response.to_wire(), addr)
-
-        except KeyboardInterrupt:
-            print("\nExiting...")
-            server_socket.close()
-            sys.exit(0)
-
-
-def run_dns_server_user():
-    print("Input 'q' and hit 'enter' to quit")
-    print("DNS server is running...")
-
-    def user_input():
-        while True:
-            cmd = input()
-            if cmd.lower() == 'q':
-                print('Quitting...')
-                os.kill(os.getpid(), signal.SIGINT)
-
-    input_thread = threading.Thread(target=user_input)
-    input_thread.daemon = True
-    input_thread.start()
-    run_dns_server()
-
-
-if __name__ == '__main__':
-    run_dns_server_user()
+                    SOA(
