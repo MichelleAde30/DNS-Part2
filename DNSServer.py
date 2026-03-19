@@ -45,7 +45,7 @@ def decrypt_with_aes(encrypted_data, password, salt):
     if isinstance(encrypted_data, str):
         encrypted_data = encrypted_data.encode('utf-8')
 
-    return f.decrypt(encrypted_data).decode('utf-8'
+    return f.decrypt(encrypted_data).decode('utf-8')
 
 
 # -----------------------------
