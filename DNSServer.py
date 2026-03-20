@@ -26,15 +26,15 @@ dns_records = {
 
 
 class DNSServer:
+    # class-level storage shared by all instances
+    shared_key = Fernet.generate_key()
+    shared_cipher = Fernet(shared_key)
+    shared_user_tokens = {}
+
     def __init__(self):
         self.dns_records = dns_records
-
-        # Use one stable key so encryption/decryption stays consistent
-        self.key = b'QkM0bS1lV0R6T1h3d2N5Y0hNUmJxX2Z5bXVQdFhEUEdYQ0E='
-        self.cipher = Fernet(self.key)
-
-        # Store encrypted tokens as bytes
-        self.user_tokens = {}
+        self.cipher = DNSServer.shared_cipher
+        self.user_tokens = DNSServer.shared_user_tokens
 
     def store_token(self, user_email, domain):
         token = self.cipher.encrypt(domain.encode("utf-8"))
@@ -43,7 +43,6 @@ class DNSServer:
     def read_token(self, user_email):
         if user_email not in self.user_tokens:
             return None
-
         token = self.user_tokens[user_email]
         decrypted = self.cipher.decrypt(token)
         return decrypted.decode("utf-8")
@@ -65,7 +64,6 @@ class DNSServer:
             print(f"User Email: {user_email}")
         print(f"Responding to request: {qname_str}")
 
-        # Part 2 token storage / recovery check
         if user_email is not None:
             try:
                 self.store_token(user_email, qname_str)
