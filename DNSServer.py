@@ -29,31 +29,23 @@ class DNSServer:
     def __init__(self):
         self.dns_records = dns_records
 
-        # keep one key for the whole server instance
-        self.key = Fernet.generate_key()
+        # Use one stable key so encryption/decryption stays consistent
+        self.key = b'QkM0bS1lV0R6T1h3d2N5Y0hNUmJxX2Z5bXVQdFhEUEdYQ0E='
         self.cipher = Fernet(self.key)
 
-        # store tokens consistently as strings
+        # Store encrypted tokens as bytes
         self.user_tokens = {}
 
     def store_token(self, user_email, domain):
-        """
-        Encrypt and store the domain safely.
-        Fernet returns bytes, so decode once for storage.
-        """
         token = self.cipher.encrypt(domain.encode("utf-8"))
-        self.user_tokens[user_email] = token.decode("utf-8")
+        self.user_tokens[user_email] = token
 
     def read_token(self, user_email):
-        """
-        Read token back and convert to bytes before decrypting.
-        """
         if user_email not in self.user_tokens:
             return None
 
-        token_str = self.user_tokens[user_email]
-        token_bytes = token_str.encode("utf-8")
-        decrypted = self.cipher.decrypt(token_bytes)
+        token = self.user_tokens[user_email]
+        decrypted = self.cipher.decrypt(token)
         return decrypted.decode("utf-8")
 
     def handle_query(self, request_bytes, user_email=None):
@@ -69,11 +61,12 @@ class DNSServer:
         qtype = question.rdtype
         qname_str = str(qname)
 
+        if user_email is not None:
+            print(f"User Email: {user_email}")
         print(f"Responding to request: {qname_str}")
 
         # Part 2 token storage / recovery check
         if user_email is not None:
-            print(f"User Email: {user_email}")
             try:
                 self.store_token(user_email, qname_str)
                 recovered_domain = self.read_token(user_email)
