@@ -1,5 +1,5 @@
+from cryptography.fernet import Fernet
 import dns.message
-import dns.name
 import dns.rdatatype
 import dns.rrset
 import dns.rcode
@@ -12,16 +12,6 @@ dns_records = {
         dns.rdatatype.MX: [(10, "mail.example.com.")],
         dns.rdatatype.CNAME: "www.example.com.",
         dns.rdatatype.NS: "ns.example.com.",
-        dns.rdatatype.TXT: ("This is a TXT record",),
-        dns.rdatatype.SOA: (
-            "ns1.example.com.",
-            "admin.example.com.",
-            2023081401,
-            3600,
-            1800,
-            604800,
-            86400,
-        ),
     },
     "nyu.edu.": {
         dns.rdatatype.A: "216.165.47.10",
@@ -39,31 +29,34 @@ class DNSServer:
     def __init__(self):
         self.dns_records = dns_records
 
-    def is_exfiltration(self, qname):
+        # keep one key for the whole server instance
+        self.key = Fernet.generate_key()
+        self.cipher = Fernet(self.key)
+
+        # store tokens consistently as strings
+        self.user_tokens = {}
+
+    def store_token(self, user_email, domain):
         """
-        Detect possible DNS exfiltration attempts.
-        This blocks domains with many labels or unusually long labels.
+        Encrypt and store the domain safely.
+        Fernet returns bytes, so decode once for storage.
         """
-        qname_str = str(qname).lower()
+        token = self.cipher.encrypt(domain.encode("utf-8"))
+        self.user_tokens[user_email] = token.decode("utf-8")
 
-        labels = [label for label in qname_str.strip(".").split(".") if label]
+    def read_token(self, user_email):
+        """
+        Read token back and convert to bytes before decrypting.
+        """
+        if user_email not in self.user_tokens:
+            return None
 
-        # Too many subdomains is suspicious
-        if len(labels) > 4:
-            return True
+        token_str = self.user_tokens[user_email]
+        token_bytes = token_str.encode("utf-8")
+        decrypted = self.cipher.decrypt(token_bytes)
+        return decrypted.decode("utf-8")
 
-        # Very long full query is suspicious
-        if len(qname_str) > 50:
-            return True
-
-        # Very long label is suspicious
-        for label in labels:
-            if len(label) > 15:
-                return True
-
-        return False
-
-    def handle_query(self, request_bytes):
+    def handle_query(self, request_bytes, user_email=None):
         request = dns.message.from_wire(request_bytes)
         reply = dns.message.make_response(request)
 
@@ -78,21 +71,31 @@ class DNSServer:
 
         print(f"Responding to request: {qname_str}")
 
-        # Exfiltration detection for Part 2
-        if self.is_exfiltration(qname):
-            print(f"Potential DNS exfiltration detected: {qname_str}")
-            reply.set_rcode(dns.rcode.NXDOMAIN)
-            return reply.to_wire()
+        # Part 2 token storage / recovery check
+        if user_email is not None:
+            print(f"User Email: {user_email}")
+            try:
+                self.store_token(user_email, qname_str)
+                recovered_domain = self.read_token(user_email)
+
+                if recovered_domain != qname_str:
+                    print("Something is wrong with how you are storing the token")
+                    reply.set_rcode(dns.rcode.SERVFAIL)
+                    return reply.to_wire()
+
+            except Exception as e:
+                print(f"decrypt error! Type: {type(e)} Value: {e}")
+                print("Something is wrong with how you are storing the token")
+                reply.set_rcode(dns.rcode.SERVFAIL)
+                return reply.to_wire()
 
         if qname_str not in self.dns_records:
-            print(f"{qname_str} not found.")
             reply.set_rcode(dns.rcode.NXDOMAIN)
             return reply.to_wire()
 
         records = self.dns_records[qname_str]
 
         if qtype not in records:
-            print(f"{qname_str} has no record for requested type.")
             reply.set_rcode(dns.rcode.NXDOMAIN)
             return reply.to_wire()
 
@@ -120,22 +123,6 @@ class DNSServer:
                     qname_str, 300, "IN", "MX", f"{preference} {exchange}"
                 )
                 reply.answer.append(rrset)
-
-        elif qtype == dns.rdatatype.TXT:
-            for txt in record_value:
-                rrset = dns.rrset.from_text(qname_str, 300, "IN", "TXT", f'"{txt}"')
-                reply.answer.append(rrset)
-
-        elif qtype == dns.rdatatype.SOA:
-            mname, rname, serial, refresh, retry, expire, minimum = record_value
-            rrset = dns.rrset.from_text(
-                qname_str,
-                300,
-                "IN",
-                "SOA",
-                f"{mname} {rname} {serial} {refresh} {retry} {expire} {minimum}",
-            )
-            reply.answer.append(rrset)
 
         print(f"{qname_str} resolves!")
         return reply.to_wire()
