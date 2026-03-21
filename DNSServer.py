@@ -1,10 +1,10 @@
-
 import dns.message
 import dns.rdatatype
 import dns.rdataclass
 from dns.rdtypes.ANY.MX import MX
 from dns.rdtypes.ANY.SOA import SOA
 import dns.rdata
+import dns.rrset
 import socket
 import threading
 import signal
@@ -28,14 +28,14 @@ def generate_aes_key(password, salt):
         salt=salt,
         length=32
     )
-    key = kdf.derive(password.encode('utf-8'))
+    key = kdf.derive(password.encode("utf-8"))
     return base64.urlsafe_b64encode(key)
 
 
 def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    return f.encrypt(input_string.encode('utf-8'))
+    return f.encrypt(input_string.encode("utf-8"))
 
 
 def decrypt_with_aes(encrypted_data, password, salt):
@@ -43,9 +43,9 @@ def decrypt_with_aes(encrypted_data, password, salt):
     f = Fernet(key)
 
     if isinstance(encrypted_data, str):
-        encrypted_data = encrypted_data.encode('utf-8')
+        encrypted_data = encrypted_data.encode("utf-8")
 
-    return f.decrypt(encrypted_data).decode('utf-8')
+    return f.decrypt(encrypted_data).decode("utf-8")
 
 
 # -----------------------------
@@ -58,8 +58,8 @@ input_string = "AlwaysWatching"
 
 encrypted_value = encrypt_with_aes(input_string, password, salt)
 
-# Clean Fernet token
-token = encrypted_value.decode('utf-8').strip()
+# Store token as a normal UTF-8 string
+token = encrypted_value.decode("utf-8")
 
 
 # -----------------------------
@@ -67,16 +67,16 @@ token = encrypted_value.decode('utf-8').strip()
 # -----------------------------
 
 dns_records = {
-    'example.com.': {
-        dns.rdatatype.A: '192.168.1.101',
-        dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0370:7334',
-        dns.rdatatype.MX: [(10, 'mail.example.com.')],
-        dns.rdatatype.CNAME: 'www.example.com.',
-        dns.rdatatype.NS: 'ns.example.com.',
-        dns.rdatatype.TXT: ('This is a TXT record',),
+    "example.com.": {
+        dns.rdatatype.A: "192.168.1.101",
+        dns.rdatatype.AAAA: "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+        dns.rdatatype.MX: [(10, "mail.example.com.")],
+        dns.rdatatype.CNAME: "www.example.com.",
+        dns.rdatatype.NS: "ns.example.com.",
+        dns.rdatatype.TXT: "This is a TXT record",
         dns.rdatatype.SOA: (
-            'ns1.example.com.',
-            'admin.example.com.',
+            "ns1.example.com.",
+            "admin.example.com.",
             2023081401,
             3600,
             1800,
@@ -85,17 +85,28 @@ dns_records = {
         ),
     },
 
-    'safebank.com.': {dns.rdatatype.A: '192.168.1.102'},
-    'google.com.': {dns.rdatatype.A: '192.168.1.103'},
-    'legitsite.com.': {dns.rdatatype.A: '192.168.1.104'},
-    'yahoo.com.': {dns.rdatatype.A: '192.168.1.105'},
+    "safebank.com.": {
+        dns.rdatatype.A: "192.168.1.102"
+    },
 
-    'nyu.edu.': {
-        dns.rdatatype.A: '192.168.1.106',
-        dns.rdatatype.TXT: (token,),
-        dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
-        dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
-        dns.rdatatype.NS: 'ns1.nyu.edu.'
+    "google.com.": {
+        dns.rdatatype.A: "192.168.1.103"
+    },
+
+    "legitsite.com.": {
+        dns.rdatatype.A: "192.168.1.104"
+    },
+
+    "yahoo.com.": {
+        dns.rdatatype.A: "192.168.1.105"
+    },
+
+    "nyu.edu.": {
+        dns.rdatatype.A: "192.168.1.106",
+        dns.rdatatype.TXT: token,
+        dns.rdatatype.MX: [(10, "mxa-00256a01.gslb.pphosted.com.")],
+        dns.rdatatype.AAAA: "2001:0db8:85a3:0000:0000:8a2e:0373:7312",
+        dns.rdatatype.NS: "ns1.nyu.edu."
     },
 }
 
@@ -147,6 +158,16 @@ def run_dns_server():
                     )
                 )
 
+            elif qtype == dns.rdatatype.TXT:
+                # TXT records should be created as quoted text
+                rdata_list.append(
+                    dns.rdata.from_text(
+                        dns.rdataclass.IN,
+                        dns.rdatatype.TXT,
+                        '"' + answer_data + '"'
+                    )
+                )
+
             else:
                 if isinstance(answer_data, str):
                     rdata_list.append(
@@ -181,8 +202,8 @@ def run_dns_server_user():
     def user_input():
         while True:
             cmd = input()
-            if cmd.lower() == 'q':
-                print('Quitting...')
+            if cmd.lower() == "q":
+                print("Quitting...")
                 os.kill(os.getpid(), signal.SIGINT)
 
     input_thread = threading.Thread(target=user_input)
@@ -191,5 +212,5 @@ def run_dns_server_user():
     run_dns_server()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     run_dns_server_user()
